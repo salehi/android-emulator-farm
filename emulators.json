@@ -1,5 +1,6 @@
 {
   "repository": "android-emulator-farm",
+  "description": "Headless Android emulators (API 24-36) in Docker for testing APKs and AABs over adb before release.",
   "latest": "36",
   "emulators": [
     { "api": "24", "android": "7.0",  "system_image": "google_apis" },

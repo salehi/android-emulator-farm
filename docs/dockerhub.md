@@ -36,6 +36,22 @@ bundletool build-apks --bundle=app.aab --output=app.apks --connected-device
 bundletool install-apks --apks=app.apks --device-id=127.0.0.1:5036
 ```
 
+## Compose
+
+```yaml
+services:
+  android-34:
+    image: s4l3h1/android-emulator-farm:api34
+    devices:
+      - /dev/kvm:/dev/kvm
+    shm_size: "2gb"
+    ports:
+      - "127.0.0.1:5034:5556"
+```
+
+The source repository has a ready-made `docker-compose.yml` with one service
+per API.
+
 ## Tags
 
 `api<API>-<git sha>` is also pushed for every build and never moves. `latest`

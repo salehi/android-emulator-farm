@@ -8,6 +8,11 @@
 # Flow: plan -> sdk (shared layer, pushed once) -> one job per API
 #       (build and push) -> Docker Hub description.
 #
+# A push to main publishes only what it affects (.github/scripts/changed-apis.sh):
+# every API when docker/ changes, otherwise the emulators.json entries that
+# were added or changed. Workflow and script changes publish nothing; run the
+# workflow by hand when they should.
+#
 # The smoke test is optional (manual runs only). When enabled, each image is
 # booted on a KVM runner and checked over adb before it is pushed, and an
 # image that fails is never pushed. It adds a few minutes per API.
@@ -41,8 +46,6 @@ on:
     paths:
       - docker/**
       - emulators.json
-      - .github/scripts/**
-      - .github/workflows/publish.yml
 
 permissions:
   contents: read
@@ -62,9 +65,12 @@ jobs:
     outputs:
       image: ${{ steps.plan.outputs.image }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Check Docker Hub settings
         env:
@@ -76,12 +82,25 @@ jobs:
       - name: Plan the matrix
         id: plan
         env:
-          APIS: ${{ inputs.apis || 'all' }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          INPUT_APIS: ${{ inputs.apis }}
         run: |
+          if [ "$EVENT" = push ]; then
+            apis="$(.github/scripts/changed-apis.sh "$BEFORE")"
+          else
+            apis="${INPUT_APIS:-all}"
+          fi
           image="$(jq -r '"\(.namespace)/\(.repository)"' emulators.json)"
-          matrix="$(.github/scripts/matrix.sh "$image" "$GITHUB_SHA" "$APIS")"
           echo "image=${image}" >> "$GITHUB_OUTPUT"
+          if [ -z "$apis" ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "### Nothing to publish: no image is affected by this push." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          matrix="$(.github/scripts/matrix.sh "$image" "$GITHUB_SHA" "$apis")"
           echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          echo "count=$(jq '.include | length' <<<"$matrix")" >> "$GITHUB_OUTPUT"
           {
             echo "### Publishing to \`${image}\`"
             echo
@@ -91,6 +110,7 @@ jobs:
   sdk:
     name: SDK layer
     needs: plan
+    if: needs.plan.outputs.count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -126,6 +146,7 @@ jobs:
   emulator:
     name: API ${{ matrix.api }}
     needs: [plan, sdk]
+    if: needs.plan.outputs.count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:

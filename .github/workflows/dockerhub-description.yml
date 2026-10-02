@@ -1,0 +1,74 @@
+# Updates the Docker Hub overview from docs/dockerhub.md and the short
+# description from emulators.json.
+#
+# Runs on its own when either file changes on main, from the Actions tab, and
+# at the end of the publish workflow (the repository must exist first).
+#
+# The Docker Hub token needs Read, Write, Delete scope to edit descriptions.
+
+name: Docker Hub description
+
+on:
+  workflow_call:
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+      DOCKERHUB_USERNAME:
+        required: false
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/dockerhub.md
+      - emulators.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-description
+  cancel-in-progress: true
+
+jobs:
+  description:
+    name: Update description
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read repository settings
+        id: config
+        run: |
+          test -n "$DOCKERHUB_USERNAME" || { echo "::error::Set the DOCKERHUB_USERNAME variable."; exit 1; }
+          scripts/validate.sh
+          echo "repository=${DOCKERHUB_USERNAME}/$(jq -r .repository emulators.json)" >> "$GITHUB_OUTPUT"
+          echo "short=$(jq -r .description emulators.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the repository exists
+        id: exists
+        env:
+          REPOSITORY: ${{ steps.config.outputs.repository }}
+        run: |
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://hub.docker.com/v2/repositories/${REPOSITORY}/")"
+          if [ "$code" = 200 ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${REPOSITORY} is not on Docker Hub yet (HTTP ${code}). Publish an image first."
+          fi
+
+      - name: Update Docker Hub description
+        if: steps.exists.outputs.found == 'true'
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ steps.config.outputs.repository }}
+          short-description: ${{ steps.config.outputs.short }}
+          readme-filepath: docs/dockerhub.md
+          enable-url-completion: true

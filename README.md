@@ -2,7 +2,7 @@
 
 [![Publish images](https://github.com/salehi/android-emulator-farm/actions/workflows/publish.yml/badge.svg)](https://github.com/salehi/android-emulator-farm/actions/workflows/publish.yml)
 [![CI](https://github.com/salehi/android-emulator-farm/actions/workflows/ci.yml/badge.svg)](https://github.com/salehi/android-emulator-farm/actions/workflows/ci.yml)
-[![Docker Hub](https://img.shields.io/docker/pulls/s4l3h1/android-emulator-farm)](https://hub.docker.com/r/s4l3h1/android-emulator-farm)
+[![Docker Hub](https://img.shields.io/docker/pulls/s4l3h1/android-emulator-farm?cacheSeconds=3600)](https://hub.docker.com/r/s4l3h1/android-emulator-farm)
 
 Ready-to-run Android emulators in Docker, one image per Android API level,
 built and published by GitHub Actions.

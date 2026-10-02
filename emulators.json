@@ -1,0 +1,19 @@
+{
+  "repository": "android-emulator-farm",
+  "latest": "36",
+  "emulators": [
+    { "api": "24", "android": "7.0",  "system_image": "google_apis" },
+    { "api": "25", "android": "7.1",  "system_image": "google_apis" },
+    { "api": "26", "android": "8.0",  "system_image": "google_apis" },
+    { "api": "27", "android": "8.1",  "system_image": "default" },
+    { "api": "28", "android": "9",    "system_image": "google_apis" },
+    { "api": "29", "android": "10",   "system_image": "google_apis" },
+    { "api": "30", "android": "11",   "system_image": "google_apis" },
+    { "api": "31", "android": "12",   "system_image": "google_apis" },
+    { "api": "32", "android": "12.1", "system_image": "google_apis" },
+    { "api": "33", "android": "13",   "system_image": "google_apis" },
+    { "api": "34", "android": "14",   "system_image": "google_apis" },
+    { "api": "35", "android": "15",   "system_image": "google_apis" },
+    { "api": "36", "android": "16",   "system_image": "google_apis" }
+  ]
+}

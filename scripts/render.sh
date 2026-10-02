@@ -94,7 +94,7 @@ emit() {
 
 status=0
 compose | emit docker-compose.yml || status=1
-for doc in README.md docs/dockerhub.md; do
+for doc in README.md docs/dockerhub.md skills/android-emulator-farm/SKILL.md; do
 	if grep -q '^<!-- emulators:start -->$' "$root/$doc"; then
 		table | splice "$root/$doc" | emit "$doc" || status=1
 	fi

@@ -18,8 +18,9 @@ run your checks before that build reaches production.
 - **No Android SDK on the host.** You need Docker and `/dev/kvm`.
 - **One tag per API.** Test the same build against several Android versions
   side by side.
-- **Built in CI, verified before publishing.** Every image is booted on a KVM
-  runner and checked over adb before it is pushed to Docker Hub.
+- **Built in CI.** GitHub Actions builds and publishes every image. An
+  optional smoke test boots each image on a KVM runner and checks adb before
+  it is pushed.
 - **One list to maintain.** `emulators.json` decides what is built, how it is
   tagged, and what the docs say.
 
@@ -78,16 +79,22 @@ API 27 uses the `default` system image because Google does not publish a
 
 ## Running several versions with Compose
 
-`docker-compose.yml` has one service per API. The Makefile wraps it:
+`docker-compose.yml` has one service per API and runs the prebuilt images
+from Docker Hub. A missing image is pulled on first start. Use it directly or
+through the Makefile:
 
 ```sh
-make run API=34 IMAGE=s4l3h1/android-emulator-farm       # pull and start one
-make run-farm IMAGE=s4l3h1/android-emulator-farm         # pull and start all
-make ps                                                  # status and health
+docker compose up -d api34      # or: make up API=34
+make farm                       # start all
+make ps                         # status and health
 make logs API=34
-make down API=34                                         # stop one
-make down                                                # stop all
+make pull API=34                # refresh to the newest published image
+make down API=34                # stop one
+make down                       # stop all
 ```
+
+Set `IMAGE` to run images from another namespace, for example
+`IMAGE=myname/android-emulator-farm make up API=34`.
 
 Starting all of them needs on the order of 26 GB of RAM.
 
@@ -107,26 +114,32 @@ All building, testing, and publishing happens in GitHub Actions.
 
 ```
 emulators.json ──► plan ──► sdk layer ──► API 24 … API 36 ──► Docker Hub description
-                  (matrix)  (pushed once)  build → boot → adb check → push
+                  (matrix)  (pushed once)  build → [smoke test] → push
 ```
 
 1. **plan** validates `emulators.json` and turns it into a build matrix with
    every tag (`.github/scripts/matrix.sh`).
 2. **sdk** builds the shared layer (Debian 13, JDK 21, command-line tools,
    platform-tools, emulator) once and pushes it as `:sdk-<sha>`.
-3. **API jobs** reuse that layer, add one system image each, then boot the
-   image on a KVM runner and check adb through the published port
-   (`.github/scripts/smoke-test.sh`). Only images that pass are pushed.
+3. **API jobs** reuse that layer, add one system image each, and push it.
+   With the optional smoke test, each image is first booted on a KVM runner
+   and checked over adb through the published port
+   (`.github/scripts/smoke-test.sh`), and only images that pass are pushed.
 4. **description** updates the Docker Hub overview from `docs/dockerhub.md`
    and the short description from `emulators.json`.
 
 The publish workflow runs on a push to `main` that touches `docker/`,
 `emulators.json`, or the publish scripts. Run it by hand from the Actions tab
-to publish `all` or a list such as `34 35 36`:
+to publish `all` or a list such as `34 35 36`, with or without the smoke
+test:
 
 ```sh
 gh workflow run publish.yml -f apis="34 35 36"
+gh workflow run publish.yml -f apis=all -f smoke_test=true
 ```
+
+The smoke test is off for pushes to `main` and off by default for manual
+runs. Turn it on after changing `docker/` or adding an API.
 
 The CI workflow lints the scripts, Dockerfile, and workflows, and checks that
 generated files match `emulators.json`.
@@ -135,16 +148,16 @@ generated files match `emulators.json`.
 
 | Path | Role |
 |---|---|
-| `emulators.json` | The list of APIs, their system images, `latest`, and the Docker Hub short description. |
+| `emulators.json` | The list of APIs, their system images, `latest`, the Docker Hub namespace and repository, and the short description. |
 | `docker/Dockerfile` | Stage `sdk` is shared. Stage `emulator` adds one API. |
 | `docker/entrypoint.sh` | Boots the AVD headless and publishes adb on port 5556. |
 | `docker/healthcheck.sh` | Healthy once `sys.boot_completed` is 1. |
-| `docker-compose.yml` | Generated. One service per API. |
+| `docker-compose.yml` | Generated. One service per API, using the Docker Hub images. |
 | `docs/dockerhub.md` | Docker Hub overview. Its tag table is generated. |
 | `scripts/validate.sh` | Validates `emulators.json`. |
 | `scripts/render.sh` | Regenerates `docker-compose.yml` and the tag tables. |
 | `.github/scripts/` | CI-only: matrix planning and the smoke test. |
-| `.github/workflows/publish.yml` | Builds, tests, and pushes images. |
+| `.github/workflows/publish.yml` | Builds, optionally smoke-tests, and pushes images. |
 | `.github/workflows/dockerhub-description.yml` | Syncs the Docker Hub description. |
 | `.github/workflows/ci.yml` | Lint and generated-file checks. |
 

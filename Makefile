@@ -1,53 +1,37 @@
-# Headless Android emulator farm. One image per Android API.
-# Nothing Android-related is installed on the host.
+# Headless Android emulator farm. One prebuilt image per Android API, pulled
+# from Docker Hub. Nothing Android-related is installed on the host.
 #
-# emulators.json lists the APIs. docker-compose.yml is generated from it with
-# `make render`. Build one API at a time: the shared sdk stage is cached after
-# the first build, and each later API downloads only its own system image.
+# Images are built and published by GitHub Actions. emulators.json lists the
+# APIs, and docker-compose.yml is generated from it with `make render`.
 #
-# Builds use the classic Docker builder by default (BUILDX_BUILDER=default).
-# Override it when a different buildx builder can reach deb.debian.org.
-#
-# IMAGE is the repository name, without a tag. Override it to pull prebuilt
-# images: IMAGE=s4l3h1/android-emulator-farm
+# Set IMAGE (repository, without a tag) to run images from another namespace.
 
-COMPOSE := docker-compose -f docker-compose.yml
+# Prefer the Compose v2 plugin, fall back to the standalone docker-compose.
+COMPOSE_BIN ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
+COMPOSE := $(COMPOSE_BIN) -f docker-compose.yml
 APIS := $(shell sed -n 's/^  api\([0-9][0-9]*\):$$/\1/p' docker-compose.yml)
 API ?=
 EMULATOR_API := $(or $(API),36)
-BUILDX_BUILDER ?= default
-IMAGE ?= android-emulator-farm
-export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: image
-image: ## Build one image (API=24 .. API=36)
-	@test -n "$(API)" || { echo "Set API to one of: $(APIS)"; exit 1; }
-	BUILDX_BUILDER=$(BUILDX_BUILDER) $(COMPOSE) build api$(API)
-
 .PHONY: pull
-pull: ## Pull one prebuilt image (API=36 IMAGE=namespace/android-emulator-farm)
-	docker pull $(IMAGE):api$(EMULATOR_API)
+pull: ## Pull the latest image for one API (API=36), or every API
+	@if [ -n "$(API)" ]; then \
+		$(COMPOSE) pull api$(API); \
+	else \
+		$(COMPOSE) pull; \
+	fi
 
 .PHONY: up
 up: ## Start one emulator (API=36 by default). adb at 127.0.0.1:5000+API
-	@echo "Starting Android API $(EMULATOR_API) from $(IMAGE) (adb at 127.0.0.1:$$((5000 + $(EMULATOR_API))))."
+	@echo "Starting Android API $(EMULATOR_API) (adb at 127.0.0.1:$$((5000 + $(EMULATOR_API))))."
 	$(COMPOSE) up -d api$(EMULATOR_API)
 
-.PHONY: run
-run: pull ## Pull and start one prebuilt emulator (API=36 IMAGE=namespace/...)
-	$(COMPOSE) up -d --no-build api$(EMULATOR_API)
-
 .PHONY: farm
-farm: ## Start every emulator from local images (about 2 GB RAM each)
-	@echo "Starting emulator farm APIs $(APIS) from $(IMAGE). Each one needs about 2 GB RAM and /dev/kvm."
+farm: ## Start every emulator (about 2 GB RAM each)
+	@echo "Starting emulator farm APIs $(APIS). Each one needs about 2 GB RAM and /dev/kvm."
 	$(COMPOSE) up -d
-
-.PHONY: run-farm
-run-farm: ## Pull and start every prebuilt emulator (IMAGE=namespace/...)
-	@for api in $(APIS); do docker pull $(IMAGE):api$$api || exit 1; done
-	$(COMPOSE) up -d --no-build
 
 .PHONY: ps
 ps: ## Show farm containers and their health
@@ -78,9 +62,7 @@ check: ## Validate emulators.json and check generated files are current
 help: ## Show this help
 	@echo "Android emulator farm — targets:"
 	@echo
-	@awk 'BEGIN{FS=":.*##"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-9s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN{FS=":.*##"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-7s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
 	@echo
-	@echo "Build:  make image API=24"
-	@echo "Run:    make run API=36 IMAGE=s4l3h1/android-emulator-farm"
+	@echo "Run:    make up API=34"
 	@echo "APIs:   $(APIS)"
-	@echo "Image:  $(IMAGE)"

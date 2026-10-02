@@ -1,7 +1,7 @@
 #!/bin/bash
 # Prints the publish matrix as compact JSON: {"include":[{...}, ...]}.
 #
-#   scripts/matrix.sh IMAGE REVISION [APIS]
+#   .github/scripts/matrix.sh IMAGE REVISION [APIS]
 #
 # IMAGE     namespace/repository, without a tag
 # REVISION  git commit used for the immutable api<API>-<REVISION> tag
@@ -11,7 +11,7 @@
 # Requires jq.
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 image="${1:?usage: matrix.sh IMAGE REVISION [APIS]}"
 revision="${2:?usage: matrix.sh IMAGE REVISION [APIS]}"
 apis="${3:-all}"

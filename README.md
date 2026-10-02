@@ -108,6 +108,14 @@ Starting all of them needs on the order of 26 GB of RAM.
 | `EMULATOR_GPU` | `swiftshader_indirect` | Emulator `-gpu` mode. |
 | `EMULATOR_ARGS` | | Extra emulator flags, split on whitespace. |
 
+## Using the farm from other projects
+
+[`skills/android-emulator-farm/SKILL.md`](skills/android-emulator-farm/SKILL.md)
+is an agent skill that explains the port rule (host adb port is 5000+API), the
+port and version table, adb usage, and matrix testing. To use it with Claude
+Code, copy the folder into another project's `.claude/skills/`, or into
+`~/.claude/skills/` to use it in every project.
+
 ## How the images are built
 
 All building, testing, and publishing happens in GitHub Actions.
@@ -157,6 +165,7 @@ generated files match `emulators.json`.
 | `docs/dockerhub.md` | Docker Hub overview. Its tag table is generated. |
 | `scripts/validate.sh` | Validates `emulators.json`. |
 | `scripts/render.sh` | Regenerates `docker-compose.yml` and the tag tables. |
+| `skills/android-emulator-farm/SKILL.md` | Agent skill for using the farm from other projects. Its port table is generated. |
 | `.github/scripts/` | CI-only: change detection, matrix planning, and the smoke test. |
 | `.github/workflows/publish.yml` | Builds, optionally smoke-tests, and pushes images. |
 | `.github/workflows/dockerhub-description.yml` | Syncs the Docker Hub description. |

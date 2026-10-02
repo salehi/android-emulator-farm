@@ -156,18 +156,3 @@ generated files match `emulators.json`.
    tag tables, then `make check`.
 3. Commit and push to `main`. The publish workflow builds and pushes the
    change, and the description workflow updates Docker Hub.
-
-## Publishing setup
-
-Create a Docker Hub access token with **Read, Write, Delete** scope. Delete
-is required to edit the repository description. Then, from a checkout of
-this repository:
-
-```sh
-gh variable set DOCKERHUB_USERNAME --body "your-dockerhub-username"
-gh secret set DOCKERHUB_TOKEN < path/to/token-file
-```
-
-The Docker Hub repository is created by the first push. A full publish takes
-a while, because each system image is large and up to four APIs build at a
-time.

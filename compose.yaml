@@ -1,0 +1,175 @@
+# Headless emulator farm. One container per API. Host adb port is 5000+API,
+# bound to 127.0.0.1. Requires /dev/kvm on the host.
+#
+# APIs in this file:
+#   24  25  26  27  28  29  30  31  32  33  34  35  36
+#
+# API 27 uses the default system image. The others use google_apis.
+# IMAGE is the repository, without a tag. The default builds local images.
+#   IMAGE=namespace/android-emulator-farm make run API=36
+#
+#   make image API=24         # build one
+#   make run API=36           # pull a prebuilt image and start it
+#   make farm                 # start every API from local images
+#   make up API=36            # start one
+#   make down API=36          # stop one
+
+x-build: &build
+  context: .
+  dockerfile: Dockerfile
+  target: emulator
+
+x-emulator: &emulator
+  privileged: true
+  devices:
+    - /dev/kvm:/dev/kvm
+  shm_size: "2gb"
+  restart: "no"
+  stdin_open: true
+  tty: true
+
+services:
+  # API 24 — adb 127.0.0.1:5024
+  api24:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api24
+    container_name: emulator-farm-24
+    build:
+      <<: *build
+      args:
+        API: "24"
+    ports:
+      - "127.0.0.1:5024:5556"
+  # API 25 — adb 127.0.0.1:5025
+  api25:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api25
+    container_name: emulator-farm-25
+    build:
+      <<: *build
+      args:
+        API: "25"
+    ports:
+      - "127.0.0.1:5025:5556"
+  # API 26 — adb 127.0.0.1:5026
+  api26:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api26
+    container_name: emulator-farm-26
+    build:
+      <<: *build
+      args:
+        API: "26"
+    ports:
+      - "127.0.0.1:5026:5556"
+  # API 27 — adb 127.0.0.1:5027 — system image: default
+  api27:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api27
+    container_name: emulator-farm-27
+    build:
+      <<: *build
+      args:
+        API: "27"
+        SYSTEM_IMAGE: default
+    ports:
+      - "127.0.0.1:5027:5556"
+  # API 28 — adb 127.0.0.1:5028
+  api28:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api28
+    container_name: emulator-farm-28
+    build:
+      <<: *build
+      args:
+        API: "28"
+    ports:
+      - "127.0.0.1:5028:5556"
+  # API 29 — adb 127.0.0.1:5029
+  api29:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api29
+    container_name: emulator-farm-29
+    build:
+      <<: *build
+      args:
+        API: "29"
+    ports:
+      - "127.0.0.1:5029:5556"
+  # API 30 — adb 127.0.0.1:5030
+  api30:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api30
+    container_name: emulator-farm-30
+    build:
+      <<: *build
+      args:
+        API: "30"
+    ports:
+      - "127.0.0.1:5030:5556"
+  # API 31 — adb 127.0.0.1:5031
+  api31:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api31
+    container_name: emulator-farm-31
+    build:
+      <<: *build
+      args:
+        API: "31"
+    ports:
+      - "127.0.0.1:5031:5556"
+  # API 32 — adb 127.0.0.1:5032
+  api32:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api32
+    container_name: emulator-farm-32
+    build:
+      <<: *build
+      args:
+        API: "32"
+    ports:
+      - "127.0.0.1:5032:5556"
+  # API 33 — adb 127.0.0.1:5033
+  api33:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api33
+    container_name: emulator-farm-33
+    build:
+      <<: *build
+      args:
+        API: "33"
+    ports:
+      - "127.0.0.1:5033:5556"
+  # API 34 — adb 127.0.0.1:5034
+  api34:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api34
+    container_name: emulator-farm-34
+    build:
+      <<: *build
+      args:
+        API: "34"
+    ports:
+      - "127.0.0.1:5034:5556"
+  # API 35 — adb 127.0.0.1:5035
+  api35:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api35
+    container_name: emulator-farm-35
+    build:
+      <<: *build
+      args:
+        API: "35"
+    ports:
+      - "127.0.0.1:5035:5556"
+  # API 36 — adb 127.0.0.1:5036
+  api36:
+    <<: *emulator
+    image: ${IMAGE:-android-emulator-farm}:api36
+    container_name: emulator-farm-36
+    build:
+      <<: *build
+      args:
+        API: "36"
+    ports:
+      - "127.0.0.1:5036:5556"

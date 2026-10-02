@@ -128,9 +128,10 @@ emulators.json ──► plan ──► sdk layer ──► API 24 … API 36 �
 4. **description** updates the Docker Hub overview from `docs/dockerhub.md`
    and the short description from `emulators.json`.
 
-The publish workflow runs on a push to `main` that touches `docker/`,
-`emulators.json`, or the publish scripts. Run it by hand from the Actions tab
-to publish `all` or a list such as `34 35 36`, with or without the smoke
+A push to `main` publishes only what it affects: every API when `docker/`
+changes, otherwise just the `emulators.json` entries that were added or
+changed. Workflow and script changes publish nothing. Run it by hand from the
+Actions tab to publish `all` or a list such as `34 35 36`, with or without the smoke
 test:
 
 ```sh
@@ -156,7 +157,7 @@ generated files match `emulators.json`.
 | `docs/dockerhub.md` | Docker Hub overview. Its tag table is generated. |
 | `scripts/validate.sh` | Validates `emulators.json`. |
 | `scripts/render.sh` | Regenerates `docker-compose.yml` and the tag tables. |
-| `.github/scripts/` | CI-only: matrix planning and the smoke test. |
+| `.github/scripts/` | CI-only: change detection, matrix planning, and the smoke test. |
 | `.github/workflows/publish.yml` | Builds, optionally smoke-tests, and pushes images. |
 | `.github/workflows/dockerhub-description.yml` | Syncs the Docker Hub description. |
 | `.github/workflows/ci.yml` | Lint and generated-file checks. |

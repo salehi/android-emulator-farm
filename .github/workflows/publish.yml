@@ -42,8 +42,7 @@ on:
     branches:
       - main
     paths:
-      - Dockerfile
-      - entrypoint.sh
+      - docker/**
       - .github/workflows/publish.yml
 
 permissions:
@@ -97,7 +96,7 @@ jobs:
       - name: Build and push SDK
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ./docker
           target: sdk
           push: true
           platforms: linux/amd64
@@ -210,7 +209,7 @@ jobs:
       - name: Build and push API ${{ matrix.api }}
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ./docker
           target: emulator
           push: true
           platforms: linux/amd64

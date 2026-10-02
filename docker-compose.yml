@@ -15,8 +15,7 @@
 #   make down API=36          # stop one
 
 x-build: &build
-  context: .
-  dockerfile: Dockerfile
+  context: ./docker
   target: emulator
 
 x-emulator: &emulator

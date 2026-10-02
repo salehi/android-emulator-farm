@@ -7,7 +7,9 @@ config="${EMULATORS_CONFIG:-$root/emulators.json}"
 
 jq -e '
 	def assert(cond; msg): if cond then . else error("emulators.json: " + msg) end;
-	assert(.repository | type == "string" and test("^[a-z0-9][a-z0-9._-]*$");
+	assert(.namespace | type == "string" and test("^[a-z0-9][a-z0-9_-]*$");
+		"namespace must be a Docker Hub user or organization")
+	| assert(.repository | type == "string" and test("^[a-z0-9][a-z0-9._-]*$");
 		"repository must be a Docker Hub repository name")
 	| assert(.description | type == "string" and length > 0 and length <= 100;
 		"description must be 1-100 characters (Docker Hub short description)")

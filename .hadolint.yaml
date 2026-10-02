@@ -1,0 +1,7 @@
+# DL3008: apt packages follow Debian trixie updates on purpose.
+# DL3059: the system image and platform downloads are separate layers on purpose.
+# DL4006: the only pipes feed "yes"/"no" into license and AVD prompts.
+ignored:
+  - DL3008
+  - DL3059
+  - DL4006

@@ -208,7 +208,9 @@ jobs:
           {
             echo "### API ${API} (Android ${ANDROID}, ${SYSTEM_IMAGE})"
             echo
-            sed 's/.*/- `&`/' <<<"$TAGS"
+            while read -r tag; do
+              echo "- \`${tag}\`"
+            done <<<"$TAGS"
           } >> "$GITHUB_STEP_SUMMARY"
 
   description:

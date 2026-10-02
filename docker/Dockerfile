@@ -42,7 +42,7 @@ RUN mkdir -p $ANDROID_SDK_ROOT/cmdline-tools \
     && unzip -q /tmp/cmdline-tools.zip -d $ANDROID_SDK_ROOT/cmdline-tools \
     && mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest \
     && rm /tmp/cmdline-tools.zip \
-    && yes | sdkmanager --licenses >/dev/null || true \
+    && { yes | sdkmanager --licenses >/dev/null || true; } \
     && sdkmanager --install "platform-tools" "emulator"
 
 # --- emulator: one API. Inherits the sdk stage from the build cache. -------

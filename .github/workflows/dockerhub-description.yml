@@ -46,7 +46,7 @@ jobs:
         run: |
           test -n "$DOCKERHUB_USERNAME" || { echo "::error::Set the DOCKERHUB_USERNAME variable."; exit 1; }
           scripts/validate.sh
-          echo "repository=${DOCKERHUB_USERNAME}/$(jq -r .repository emulators.json)" >> "$GITHUB_OUTPUT"
+          echo "repository=$(jq -r '"\(.namespace)/\(.repository)"' emulators.json)" >> "$GITHUB_OUTPUT"
           echo "short=$(jq -r .description emulators.json)" >> "$GITHUB_OUTPUT"
 
       - name: Check whether the repository exists

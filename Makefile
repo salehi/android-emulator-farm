@@ -1,17 +1,18 @@
-# Headless Android emulator farm. One image per Android API 24-36.
+# Headless Android emulator farm. One image per Android API.
 # Nothing Android-related is installed on the host.
 #
-# Build one API at a time. The shared sdk stage is cached after the first
-# successful build. A later API downloads only its system image and platform.
+# emulators.json lists the APIs. docker-compose.yml is generated from it with
+# `make render`. Build one API at a time: the shared sdk stage is cached after
+# the first build, and each later API downloads only its own system image.
 #
-# The default BuildKit builder on this machine (meshcheck) cannot resolve
-# deb.debian.org. Builds use the default Docker driver instead.
+# Builds use the classic Docker builder by default (BUILDX_BUILDER=default).
+# Override it when a different buildx builder can reach deb.debian.org.
 #
 # IMAGE is the repository name, without a tag. Override it to pull prebuilt
-# images: IMAGE=namespace/android-emulator-farm
+# images: IMAGE=s4l3h1/android-emulator-farm
 
 COMPOSE := docker-compose -f docker-compose.yml
-APIS := 24 25 26 27 28 29 30 31 32 33 34 35 36
+APIS := $(shell sed -n 's/^  api\([0-9][0-9]*\):$$/\1/p' docker-compose.yml)
 API ?=
 EMULATOR_API := $(or $(API),36)
 BUILDX_BUILDER ?= default
@@ -39,18 +40,22 @@ run: pull ## Pull and start one prebuilt emulator (API=36 IMAGE=namespace/...)
 	$(COMPOSE) up -d --no-build api$(EMULATOR_API)
 
 .PHONY: farm
-farm: ## Start every API 24-36 emulator (about 2 GB RAM each, needs /dev/kvm)
+farm: ## Start every emulator from local images (about 2 GB RAM each)
 	@echo "Starting emulator farm APIs $(APIS) from $(IMAGE). Each one needs about 2 GB RAM and /dev/kvm."
 	$(COMPOSE) up -d
 
 .PHONY: run-farm
 run-farm: ## Pull and start every prebuilt emulator (IMAGE=namespace/...)
-	@for api in $(APIS); do docker pull $(IMAGE):api$$api; done
+	@for api in $(APIS); do docker pull $(IMAGE):api$$api || exit 1; done
 	$(COMPOSE) up -d --no-build
 
 .PHONY: ps
-ps: ## Show farm containers
+ps: ## Show farm containers and their health
 	$(COMPOSE) ps
+
+.PHONY: logs
+logs: ## Follow one emulator's log (API=36 by default)
+	$(COMPOSE) logs -f api$(EMULATOR_API)
 
 .PHONY: down
 down: ## Stop one emulator (API=) or the whole farm
@@ -60,13 +65,22 @@ down: ## Stop one emulator (API=) or the whole farm
 		$(COMPOSE) down; \
 	fi
 
+.PHONY: render
+render: ## Regenerate files derived from emulators.json (needs jq)
+	scripts/render.sh
+
+.PHONY: check
+check: ## Validate emulators.json and check generated files are current
+	scripts/render.sh --check
+	$(COMPOSE) config --quiet
+
 .PHONY: help
 help: ## Show this help
 	@echo "Android emulator farm — targets:"
 	@echo
-	@awk 'BEGIN{FS=":.*##"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-8s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN{FS=":.*##"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-9s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
 	@echo
 	@echo "Build:  make image API=24"
-	@echo "Run:    make run API=36 IMAGE=namespace/android-emulator-farm"
+	@echo "Run:    make run API=36 IMAGE=s4l3h1/android-emulator-farm"
 	@echo "APIs:   $(APIS)"
 	@echo "Image:  $(IMAGE)"

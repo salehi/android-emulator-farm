@@ -1,13 +1,16 @@
-# Builds, smoke-tests, and publishes linux/amd64 emulator images to Docker Hub.
+# Builds, optionally smoke-tests, and publishes linux/amd64 emulator images to Docker Hub.
 #
-# Repository: <DOCKERHUB_USERNAME>/<repository in emulators.json>
+# Repository: <namespace>/<repository> from emulators.json
 #
 # emulators.json decides which APIs exist and which one is :latest.
 # .github/scripts/matrix.sh turns it into the build matrix and tag list.
 #
 # Flow: plan -> sdk (shared layer, pushed once) -> one job per API
-#       (build, boot on KVM, check adb, push) -> Docker Hub description.
-# An image that fails its smoke test is never pushed.
+#       (build and push) -> Docker Hub description.
+#
+# The smoke test is optional (manual runs only). When enabled, each image is
+# booted on a KVM runner and checked over adb before it is pushed, and an
+# image that fails is never pushed. It adds a few minutes per API.
 #
 # Settings (from a checkout of this repo):
 #   gh variable set DOCKERHUB_USERNAME --body "your-dockerhub-username"
@@ -28,9 +31,9 @@ on:
         default: all
         type: string
       smoke_test:
-        description: Boot each image and check adb before pushing
+        description: Boot each image on KVM and check adb before pushing (slower)
         required: false
-        default: true
+        default: false
         type: boolean
   push:
     branches:
@@ -75,7 +78,7 @@ jobs:
         env:
           APIS: ${{ inputs.apis || 'all' }}
         run: |
-          image="${DOCKERHUB_USERNAME}/$(jq -r .repository emulators.json)"
+          image="$(jq -r '"\(.namespace)/\(.repository)"' emulators.json)"
           matrix="$(.github/scripts/matrix.sh "$image" "$GITHUB_SHA" "$APIS")"
           echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
@@ -132,6 +135,7 @@ jobs:
     env:
       IMAGE: ${{ needs.plan.outputs.image }}
       API: ${{ matrix.api }}
+      SMOKE_TEST: ${{ inputs.smoke_test && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -150,6 +154,7 @@ jobs:
           df -h /
 
       - name: Enable KVM
+        if: env.SMOKE_TEST == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -171,8 +176,9 @@ jobs:
         with:
           context: ./docker
           target: emulator
-          load: true
-          push: false
+          # With the smoke test, load locally and push after it passes.
+          load: ${{ env.SMOKE_TEST == 'true' }}
+          push: ${{ env.SMOKE_TEST != 'true' }}
           platforms: linux/amd64
           provenance: false
           sbom: false
@@ -188,10 +194,11 @@ jobs:
           tags: ${{ matrix.tags }}
 
       - name: Smoke test
-        if: ${{ github.event_name == 'push' || inputs.smoke_test }}
+        if: env.SMOKE_TEST == 'true'
         run: .github/scripts/smoke-test.sh "${IMAGE}:api${API}" "$API" 900
 
-      - name: Push tags
+      - name: Push tested tags
+        if: env.SMOKE_TEST == 'true'
         env:
           TAGS: ${{ matrix.tags }}
         run: |
@@ -207,6 +214,8 @@ jobs:
         run: |
           {
             echo "### API ${API} (Android ${ANDROID}, ${SYSTEM_IMAGE})"
+            echo
+            if [ "$SMOKE_TEST" = true ]; then echo "Smoke test passed."; else echo "Smoke test skipped."; fi
             echo
             while read -r tag; do
               echo "- \`${tag}\`"

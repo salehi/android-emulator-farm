@@ -15,7 +15,7 @@ Run every command from this directory.
 | Path | Role |
 |---|---|
 | `Dockerfile` | Stage `sdk` is shared. Stage `emulator` is one API. |
-| `compose.yaml` | One service per API. Shared settings live in YAML anchors. |
+| `docker-compose.yml` | One service per API. Shared settings live in YAML anchors. |
 | `entrypoint.sh` | Boots the AVD headless and publishes adb on port 5556. |
 | `Makefile` | `image`, `pull`, `run`, `up`, `farm`, `ps`, `down`. |
 | `.github/workflows/publish.yml` | Builds every API and pushes it to Docker Hub. |

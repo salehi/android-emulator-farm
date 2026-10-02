@@ -10,7 +10,7 @@
 # IMAGE is the repository name, without a tag. Override it to pull prebuilt
 # images: IMAGE=namespace/android-emulator-farm
 
-COMPOSE := docker-compose -f compose.yaml
+COMPOSE := docker-compose -f docker-compose.yml
 APIS := 24 25 26 27 28 29 30 31 32 33 34 35 36
 API ?=
 EMULATOR_API := $(or $(API),36)

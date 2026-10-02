@@ -55,6 +55,28 @@ EOF
 		"      - \"127.0.0.1:\(5000 + (.api|tonumber)):5556\""' "$config"
 }
 
+# Markdown table of APIs and tags, shared by README.md and docs/dockerhub.md.
+table() {
+	echo '| API | Android | System image | Tags | Host adb |'
+	echo '|---|---|---|---|---|'
+	jq -r '.latest as $latest | .emulators[] |
+		([ "api\(.api)", .api, "android-\(.android)", "api\(.api)-\(.system_image)" ]
+			+ (if .api == $latest then ["latest"] else [] end)
+			| map("`\(.)`") | join(", ")) as $tags
+		| "| \(.api) | \(.android) | `\(.system_image)` | \($tags) | `127.0.0.1:\(5000 + (.api|tonumber))` |"' "$config"
+}
+
+# Prints $1 with the lines between the emulators markers replaced by stdin.
+splice() {
+	local file="$1" body
+	body="$(cat)"
+	grep -q '^<!-- emulators:start -->$' "$file" || { echo "$file has no emulators markers" >&2; return 1; }
+	awk -v body="$body" '
+		/^<!-- emulators:start -->$/ { print; print body; skip = 1; next }
+		/^<!-- emulators:end -->$/ { skip = 0 }
+		!skip' "$file"
+}
+
 # Writes stdin to $1, or compares in --check mode.
 emit() {
 	local target="$1" tmp
@@ -68,11 +90,17 @@ emit() {
 		fi
 		rm -f "$tmp"
 	else
-		mv "$tmp" "$root/$target"
+		cat "$tmp" >"$root/$target"
+		rm -f "$tmp"
 		echo "rendered $target"
 	fi
 }
 
 status=0
 compose | emit docker-compose.yml || status=1
+for doc in README.md docs/dockerhub.md; do
+	if grep -q '^<!-- emulators:start -->$' "$root/$doc"; then
+		table | splice "$root/$doc" | emit "$doc" || status=1
+	fi
+done
 exit "$status"

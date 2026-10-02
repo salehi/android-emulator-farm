@@ -1,48 +1,44 @@
-# Publishes linux/amd64 emulator images to Docker Hub.
+# Builds, smoke-tests, and publishes linux/amd64 emulator images to Docker Hub.
 #
-# Repository: <DOCKERHUB_USERNAME>/android-emulator-farm
+# Repository: <DOCKERHUB_USERNAME>/<repository in emulators.json>
 #
-# Each API is pushed with several tags. API 36 also receives :latest.
-# The sdk tag is the shared command-line tools layer, not a runnable emulator.
+# emulators.json decides which APIs exist and which one is :latest.
+# .github/scripts/matrix.sh turns it into the build matrix and tag list.
 #
-# Secrets and variables (set with the gh CLI from this repo):
+# Flow: plan -> sdk (shared layer, pushed once) -> one job per API
+#       (build, boot on KVM, check adb, push) -> Docker Hub description.
+# An image that fails its smoke test is never pushed.
+#
+# Settings (from a checkout of this repo):
 #   gh variable set DOCKERHUB_USERNAME --body "your-dockerhub-username"
-#   gh secret set DOCKERHUB_TOKEN
+#   gh secret set DOCKERHUB_TOKEN < token-file
 #
-# DOCKERHUB_TOKEN is a Docker Hub access token with Read and Write scope.
-# The username is the account name, not the token description.
-# A DOCKERHUB_USERNAME secret is also accepted if the variable is unset.
+# The token needs Read, Write, Delete scope (Delete is only needed to edit the
+# Docker Hub description). A DOCKERHUB_USERNAME secret is accepted when the
+# variable is unset.
 
 name: Publish images
 
 on:
   workflow_dispatch:
     inputs:
-      api:
-        description: Android API to publish
+      apis:
+        description: 'APIs to publish: "all", or numbers such as "34 35 36"'
         required: true
         default: all
-        type: choice
-        options:
-          - all
-          - "24"
-          - "25"
-          - "26"
-          - "27"
-          - "28"
-          - "29"
-          - "30"
-          - "31"
-          - "32"
-          - "33"
-          - "34"
-          - "35"
-          - "36"
+        type: string
+      smoke_test:
+        description: Boot each image and check adb before pushing
+        required: false
+        default: true
+        type: boolean
   push:
     branches:
       - main
     paths:
       - docker/**
+      - emulators.json
+      - .github/scripts/**
       - .github/workflows/publish.yml
 
 permissions:
@@ -52,48 +48,64 @@ concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+
 jobs:
-  sdk:
-    name: Publish SDK layer
+  plan:
+    name: Plan
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      IMAGE: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}/android-emulator-farm
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.plan.outputs.image }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Free disk space
+      - name: Check Docker Hub settings
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /usr/local/share/boost \
-            /usr/share/swift \
-            /usr/local/.ghcup \
-            /opt/hostedtoolcache
-          sudo apt-get clean
-          df -h /
+          test -n "$DOCKERHUB_USERNAME" || { echo "::error::Set DOCKERHUB_USERNAME (gh variable set)."; exit 1; }
+          test -n "$DOCKERHUB_TOKEN" || { echo "::error::Set DOCKERHUB_TOKEN (gh secret set)."; exit 1; }
+
+      - name: Plan the matrix
+        id: plan
+        env:
+          APIS: ${{ inputs.apis || 'all' }}
+        run: |
+          image="${DOCKERHUB_USERNAME}/$(jq -r .repository emulators.json)"
+          matrix="$(.github/scripts/matrix.sh "$image" "$GITHUB_SHA" "$APIS")"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Publishing to \`${image}\`"
+            echo
+            jq -r '.include[] | "- API \(.api) (Android \(.android), \(.system_image))"' <<<"$matrix"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sdk:
+    name: SDK layer
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      IMAGE: ${{ needs.plan.outputs.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Check Docker Hub credentials
-        env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          test -n "$DOCKERHUB_USERNAME" || { echo "Set DOCKERHUB_USERNAME (gh variable set, or a secret)."; exit 1; }
-          test -n "$DOCKERHUB_TOKEN" || { echo "Set DOCKERHUB_TOKEN (gh secret set)."; exit 1; }
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v4
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push SDK
+      - name: Build and push the SDK layer
         uses: docker/build-push-action@v7
         with:
           context: ./docker
@@ -102,66 +114,27 @@ jobs:
           platforms: linux/amd64
           provenance: false
           sbom: false
+          cache-from: type=gha,scope=sdk
+          cache-to: type=gha,scope=sdk,mode=max
           tags: |
             ${{ env.IMAGE }}:sdk
             ${{ env.IMAGE }}:sdk-${{ github.sha }}
 
   emulator:
     name: API ${{ matrix.api }}
-    needs: sdk
+    needs: [plan, sdk]
     runs-on: ubuntu-latest
-    timeout-minutes: 180
-    if: ${{ github.event_name == 'push' || inputs.api == 'all' || inputs.api == matrix.api }}
+    timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 3
-      matrix:
-        include:
-        - api: "24"
-          system_image: google_apis
-          release: "7.0"
-        - api: "25"
-          system_image: google_apis
-          release: "7.1"
-        - api: "26"
-          system_image: google_apis
-          release: "8.0"
-        - api: "27"
-          system_image: default
-          release: "8.1"
-        - api: "28"
-          system_image: google_apis
-          release: "9"
-        - api: "29"
-          system_image: google_apis
-          release: "10"
-        - api: "30"
-          system_image: google_apis
-          release: "11"
-        - api: "31"
-          system_image: google_apis
-          release: "12"
-        - api: "32"
-          system_image: google_apis
-          release: "12.1"
-        - api: "33"
-          system_image: google_apis
-          release: "13"
-        - api: "34"
-          system_image: google_apis
-          release: "14"
-        - api: "35"
-          system_image: google_apis
-          release: "15"
-        - api: "36"
-          system_image: google_apis
-          release: "16"
-          latest: "true"
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
-      IMAGE: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}/android-emulator-farm
+      IMAGE: ${{ needs.plan.outputs.image }}
+      API: ${{ matrix.api }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Free disk space
         run: |
@@ -176,42 +149,30 @@ jobs:
           sudo apt-get clean
           df -h /
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v4
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Resolve tags
-        id: tags
-        env:
-          API: ${{ matrix.api }}
-          RELEASE: ${{ matrix.release }}
-          SYSTEM_IMAGE: ${{ matrix.system_image }}
-          LATEST: ${{ matrix.latest }}
-        run: |
-          {
-            echo "list<<EOF"
-            echo "${IMAGE}:api${API}"
-            echo "${IMAGE}:${API}"
-            echo "${IMAGE}:android-${RELEASE}"
-            echo "${IMAGE}:api${API}-${SYSTEM_IMAGE}"
-            echo "${IMAGE}:api${API}-${GITHUB_SHA}"
-            if [ "${LATEST}" = "true" ]; then
-              echo "${IMAGE}:latest"
-            fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build and push API ${{ matrix.api }}
+      - name: Build API ${{ matrix.api }}
         uses: docker/build-push-action@v7
         with:
           context: ./docker
           target: emulator
-          push: true
+          load: true
+          push: false
           platforms: linux/amd64
           provenance: false
           sbom: false
@@ -221,20 +182,40 @@ jobs:
             API=${{ matrix.api }}
             SYSTEM_IMAGE=${{ matrix.system_image }}
             REVISION=${{ github.sha }}
-          tags: ${{ steps.tags.outputs.list }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=android-${{ matrix.android }}
+          tags: ${{ matrix.tags }}
+
+      - name: Smoke test
+        if: ${{ github.event_name == 'push' || inputs.smoke_test }}
+        run: .github/scripts/smoke-test.sh "${IMAGE}:api${API}" "$API" 900
+
+      - name: Push tags
+        env:
+          TAGS: ${{ matrix.tags }}
+        run: |
+          while read -r tag; do
+            docker push "$tag"
+          done <<<"$TAGS"
 
       - name: Write summary
         env:
-          API: ${{ matrix.api }}
-          RELEASE: ${{ matrix.release }}
+          TAGS: ${{ matrix.tags }}
+          ANDROID: ${{ matrix.android }}
           SYSTEM_IMAGE: ${{ matrix.system_image }}
         run: |
           {
-            echo "### API ${API} (Android ${RELEASE}, ${SYSTEM_IMAGE})"
+            echo "### API ${API} (Android ${ANDROID}, ${SYSTEM_IMAGE})"
             echo
-            echo "- \`${IMAGE}:api${API}\`"
-            echo "- \`${IMAGE}:${API}\`"
-            echo "- \`${IMAGE}:android-${RELEASE}\`"
-            echo "- \`${IMAGE}:api${API}-${SYSTEM_IMAGE}\`"
-            echo "- \`${IMAGE}:api${API}-${GITHUB_SHA}\`"
+            sed 's/.*/- `&`/' <<<"$TAGS"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  description:
+    name: Docker Hub description
+    needs: [sdk, emulator]
+    if: ${{ !cancelled() && needs.sdk.result == 'success' }}
+    uses: ./.github/workflows/dockerhub-description.yml
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}

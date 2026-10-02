@@ -77,8 +77,12 @@ RUN echo no | avdmanager create avd --force --name farm \
     && printf '%s\n' "system-images;android-${API};${SYSTEM_IMAGE};x86_64" \
         > /opt/android-sdk/system-image-package
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY entrypoint.sh healthcheck.sh /
+RUN chmod +x /entrypoint.sh /healthcheck.sh
+
+# Healthy once Android has finished booting. Newer APIs take a few minutes.
+HEALTHCHECK --interval=15s --timeout=10s --start-period=10m --retries=3 \
+    CMD ["/healthcheck.sh"]
 
 EXPOSE 5556
 ENTRYPOINT ["/entrypoint.sh"]
